@@ -3,6 +3,7 @@
 , zopfli ? pkgs.zopfli
 , useZopfli ? true
 , preserveHTML ? false
+, allJsPath ? "/bin/*/all.js"
 }:
 input:
 pkgs.runCommand "${input.name}-optimized"
@@ -12,9 +13,13 @@ pkgs.runCommand "${input.name}-optimized"
 
   cp ${if preserveHTML then "${input}/bin/*/index.html" else ./index.html} $out/index.html
 
+  cp -afv ${input}/* $out
+
   chmod +w -R $out
 
-  ${closurecompiler}/bin/closure-compiler --compilation_level ADVANCED --jscomp_off=checkVars --warning_level QUIET --js ${input}/bin/*/all.js --externs ${input}/bin/*/all.js.externs --js_output_file $out/all.js
+  rm $out${allJsPath} $out${input}${allJsPath}.externs $out/all.js $out/all.js.externs || true
+
+  ${closurecompiler}/bin/closure-compiler --compilation_level ADVANCED --jscomp_off=checkVars --warning_level QUIET --js ${input}${allJsPath} --externs ${input}${allJsPath}.externs --js_output_file $out/all.js
 
   ${ if useZopfli then "${zopfli}/bin/zopfli $out/**/*.{js,css,json,html}" else "" }
 ''
