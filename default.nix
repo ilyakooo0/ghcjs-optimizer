@@ -2,7 +2,7 @@
 , closurecompiler ? pkgs.closurecompiler
 , zopfli ? pkgs.zopfli
 , useZopfli ? true
-, preserveHTML ? false
+, createHTML ? true
 , allJsPath ? "/bin/*/all.js"
 }:
 input:
@@ -11,7 +11,7 @@ pkgs.runCommand "${input.name}-optimized"
   shopt -s globstar
   mkdir $out
 
-  cp ${if preserveHTML then "${input}/bin/*/index.html" else ./index.html} $out/index.html
+  ${if createHTML then "cp ${input}/bin/*/index.html $out/index.html" else ""}
 
   cp -afv ${input}/* $out
 
