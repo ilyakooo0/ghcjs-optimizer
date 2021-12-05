@@ -1,30 +1,69 @@
 { pkgs ? null
 , closurecompiler ? pkgs.closurecompiler
 , zopfli ? pkgs.zopfli
-, useZopfli ? true
-, useClosureCompiler ? true
-, createHTML ? true
-, allJsPath ? "/bin/*/all.js"
+, fileExtentionsToZopfli ? [ "js" "css" "json" "html" ]
+, jsToOptimize ? [ ]
+, filesToCopy ? { "" = "*"; }
+, copyInsteadOfOptimizeJs ? false
 }:
 input:
+let
+  flattenDirAttrSet' = prfx: x:
+    with builtins;
+    if isAttrs x
+    then concatLists (pkgs.lib.mapAttrsToList (p: v: flattenDirAttrSet' (prfx + "/" + p) v) x)
+    else [{ p = prfx; v = x; }];
+  flattenDirAttrSet = name: x:
+    if builtins.isAttrs x
+    then (flattenDirAttrSet' "" x)
+    else builtins.hrow "${name} should be an attribute set.";
+
+
+  flattenFileTree = name: x: builtins.map ({ p, v }: p + "/" + v) (flattenDirAttrSet name x);
+
+  filesToList = name: x:
+    if builtins.isAttrs x
+    then flattenFileTree x
+    else if builtins.isList x
+    then x
+    else builtins.throw "${name} should be either a list or an attribute set.";
+  jsToOptimizeList = flattenDirAttrSet "jsToOptimize" jsToOptimize;
+in
 pkgs.runCommand "${input.name}-optimized"
 { } ''
-  shopt -s globstar
-  mkdir $out
 
-  ${if createHTML then "cp ${input}/bin/*/index.html $out/index.html" else ""}
+    cd ${input}
+    shopt -s globstar
+    mkdir $out
 
-  cp -afv ${input}/* $out
+    chmod +w -R $out
 
-  chmod +w -R $out
+    ${
+      builtins.concatStringsSep "\n"
+        (builtins.map ({p, v}: "cp -afv ${v} $out${p}")
+        (flattenDirAttrSet "filesToCopy" filesToCopy ++
+          pkgs.lib.optionals copyInsteadOfOptimizeJs jsToOptimizeList))
+    }
 
-  rm $out${allJsPath} $out${input}${allJsPath}.externs $out/all.js $out/all.js.externs || true
-  
-  ${
-    if useClosureCompiler
-      then "${closurecompiler}/bin/closure-compiler --compilation_level ADVANCED --jscomp_off=checkVars --warning_level QUIET --js ${input}${allJsPath} --externs ${input}${allJsPath}.externs --js_output_file $out/all.js"
-      else ""
-  }
+    chmod +w -R $out
 
-  ${ if useZopfli then "${zopfli}/bin/zopfli $out/**/*.{js,css,json,html}" else "" }
-''
+    ${
+      pkgs.lib.optionalString (!copyInsteadOfOptimizeJs)
+        (builtins.concatStringsSep "\n"
+          (builtins.map ({p, v}:
+            let
+              i = v;
+              o = p;
+            in ''
+            rm -f $out${o}
+            ${closurecompiler}/bin/closure-compiler --compilation_level ADVANCED --jscomp_off=checkVars --warning_level QUIET --js ${input}/${i} --externs ${input}/${i}.externs --js_output_file $out${o}
+            '')
+          (jsToOptimizeList)))
+    }
+
+    ${
+      if fileExtentionsToZopfli != []
+        then "${zopfli}/bin/zopfli $out/**/*.{${builtins.concatStringsSep "\n" fileExtentionsToZopfli}}"
+        else ""
+    }
+  ''
