@@ -16,7 +16,7 @@ let
   flattenDirAttrSet = name: x:
     if builtins.isAttrs x
     then (flattenDirAttrSet' "" x)
-    else builtins.hrow "${name} should be an attribute set.";
+    else builtins.throw "${name} should be an attribute set.";
 
 
   flattenFileTree = name: x: builtins.map ({ p, v }: p + "/" + v) (flattenDirAttrSet name x);
